@@ -1,49 +1,50 @@
 import os
 import re
-from email import policy
-from email.parser import BytesParser
 
 
-def extract_emails(target_domain, folder_path):
+def extract_emails_from_binary(target_domain, folder_path):
     unique_emails = set()
-    # Matches standard email patterns
-    email_regex = re.compile(r'[\w\.-]+' + re.escape(target_domain), re.IGNORECASE)
+    # Regex to find emails: looks for alphanumeric/dots + @yourdomain
+    # We use [a-zA-Z0-9._%+-] to cover standard email characters
+    regex_pattern = r'[a-zA-Z0-9._%+-]+' + re.escape(target_domain)
+    email_regex = re.compile(regex_pattern, re.IGNORECASE)
 
-    print(f"Scanning files in: {folder_path}...")
+    print(f"Scanning folder: {folder_path}")
 
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".eml") or filename.endswith(".msg"):
-            file_path = os.path.join(folder_path, filename)
-            try:
-                with open(file_path, 'rb') as f:
-                    # Parse the email file
-                    msg = BytesParser(policy=policy.default).parse(f)
+    # List all files in the directory
+    files = [f for f in os.listdir(folder_path) if f.lower().endswith('.msg')]
+    print(f"Found {len(files)} .msg files to process...")
 
-                    # Consolidate headers to search
-                    headers_to_search = [
-                        msg.get('To', ''),
-                        msg.get('From', ''),
-                        msg.get('Cc', ''),
-                        msg.get('Bcc', '')
-                    ]
+    for filename in files:
+        file_path = os.path.join(folder_path, filename)
+        try:
+            with open(file_path, 'rb') as f:
+                # We read as binary ('rb') to avoid encoding crashes
+                content = f.read()
 
-                    for header in headers_to_search:
-                        matches = email_regex.findall(str(header))
-                        for email in matches:
-                            unique_emails.add(email.lower())
-            except Exception as e:
-                print(f"Could not read {filename}: {e}")
+                # Convert binary to string, ignoring characters it can't decode
+                # This turns the binary "junk" into readable text strings
+                text_content = content.decode('utf-8', errors='ignore')
+
+                # Find all matches for @example.com
+                matches = email_regex.findall(text_content)
+                for addr in matches:
+                    # Basic cleanup: some binary junk might attach to the start
+                    clean_addr = addr.lower()
+                    unique_emails.add(clean_addr)
+        except Exception as e:
+            print(f"Error reading {filename}: {e}")
 
     return sorted(list(unique_emails))
 
 
 # --- Configuration ---
 DOMAIN = "@army.mil"
-# Use "." for current directory or provide a path
-PATH_TO_EMAILS = "./my_emails"
+# Place the path to the folder where you dropped the .msg files
+MSG_FOLDER_PATH = "./MyEmailDump"
 
-results = extract_emails(DOMAIN, PATH_TO_EMAILS)
+results = extract_emails_from_binary(DOMAIN, MSG_FOLDER_PATH)
 
-print(f"\n--- Found {len(results)} Unique Emails ---")
+print(f"\n--- Found {len(results)} Unique Addresses ---")
 for email in results:
     print(email)
