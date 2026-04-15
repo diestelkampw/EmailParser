@@ -1,11 +1,11 @@
 import os
 import re
+import csv
 
 
 def extract_emails_from_binary(target_domain, folder_path):
     unique_emails = set()
-    # Regex to find emails: looks for alphanumeric/dots + @yourdomain
-    # We use [a-zA-Z0-9._%+-] to cover standard email characters
+    # Matches strings that look like emails with your domain
     regex_pattern = r'[a-zA-Z0-9._%+-]+' + re.escape(target_domain)
     email_regex = re.compile(regex_pattern, re.IGNORECASE)
 
@@ -23,15 +23,12 @@ def extract_emails_from_binary(target_domain, folder_path):
                 content = f.read()
 
                 # Convert binary to string, ignoring characters it can't decode
-                # This turns the binary "junk" into readable text strings
                 text_content = content.decode('utf-8', errors='ignore')
 
-                # Find all matches for @example.com
+                # Find all matches for the domain
                 matches = email_regex.findall(text_content)
                 for addr in matches:
-                    # Basic cleanup: some binary junk might attach to the start
-                    clean_addr = addr.lower()
-                    unique_emails.add(clean_addr)
+                    unique_emails.add(addr.lower())
         except Exception as e:
             print(f"Error reading {filename}: {e}")
 
@@ -40,11 +37,33 @@ def extract_emails_from_binary(target_domain, folder_path):
 
 # --- Configuration ---
 DOMAIN = "@army.mil"
-# Place the path to the folder where you dropped the .msg files
+# Use "." for the current directory or provide a specific path
 MSG_FOLDER_PATH = "./MyEmailDump"
+CSV_FILENAME = "extracted_emails.csv"
 
+# --- Execution ---
 results = extract_emails_from_binary(DOMAIN, MSG_FOLDER_PATH)
 
 print(f"\n--- Found {len(results)} Unique Addresses ---")
 for email in results:
     print(email)
+
+# --- CSV Export Step ---
+if results:
+    try:
+        # Get the current working directory to show the full path
+        output_path = os.path.join(os.getcwd(), CSV_FILENAME)
+
+        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            # Add a header row
+            writer.writerow(["Email Address"])
+            # Write the emails as individual rows
+            for email in results:
+                writer.writerow([email])
+
+        print(f"\n[Success] CSV file created at: {output_path}")
+    except Exception as e:
+        print(f"\n[Error] Could not create CSV file: {e}")
+else:
+    print("\n[Notice] No emails found; CSV file was not created.")
